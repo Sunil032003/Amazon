@@ -1,21 +1,24 @@
-```dockerfile
-# Use Python 3.12 as the base image
-FROM python:3.12
+# Production Dockerfile for Autonomous Retail Edge Vision Pipeline
+FROM python:3.11-slim
 
-# Set the working directory in the container
+# Prevent Python from writing .pyc files and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Copy the requirements.txt file into the container
-COPY requirements.txt .
+# Install system dependencies for OpenCV and video streaming
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install the dependencies
+# Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the project files into the container
+# Copy application source code and models
 COPY . .
 
-# Command to run the application (modify as needed)
-CMD ["python", "your_script.py"]
-``` 
-
-Replace `"your_script.py"` with the name of your main Python file.
+# Run in headless mode for container and edge deployment
+CMD ["python", "main.py", "--headless"]

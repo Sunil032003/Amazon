@@ -1,110 +1,31 @@
 import pytest
-from unittest.mock import patch, MagicMock
-from cart_engine import VirtualCartEngine  # assuming cart_engine.py is in the same directory
+from store_config import PRODUCTS, SHELF_ROIS, EXIT_LINE_Y
 
-# TC001 - Register a New Shopper
-def test_register_shopper():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    
-    assert "shopper_1" in engine.carts
-    assert engine.carts["shopper_1"] == {"items": {}, "checked_out": False}
 
-# TC002 - Add Item to Shopper's Cart
-def test_add_item():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    
-    engine.add_item("shopper_1", "shelf_soda")
-    
-    assert engine.carts["shopper_1"]["items"]["shelf_soda"] == 1
+def test_products_mapping():
+    assert "shelf_soda" in PRODUCTS
+    assert "shelf_water" in PRODUCTS
+    assert "shelf_chips" in PRODUCTS
+    assert "shelf_chocolate" in PRODUCTS
+    assert len(PRODUCTS) == 4
 
-# TC003 - Generate Receipt with Items
-def test_generate_receipt_with_items():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    engine.add_item("shopper_1", "shelf_soda")
-    
-    receipt = engine.generate_receipt("shopper_1")
-    
-    assert receipt["shelf_soda"] == 1
 
-# TC004 - Generate Receipt with Empty Cart
-def test_generate_receipt_with_empty_cart():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    
-    receipt = engine.generate_receipt("shopper_1")
-    
-    assert receipt is None
+def test_shelf_rois_match_products():
+    assert set(SHELF_ROIS.keys()) == set(PRODUCTS.keys())
 
-# TC005 - Add Item after Shopper Already Exists
-def test_add_item_after_existing_shopper():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    engine.add_item("shopper_1", "shelf_soda")
-    
-    engine.add_item("shopper_1", "shelf_water")
-    
-    assert engine.carts["shopper_1"]["items"]["shelf_soda"] == 1
-    assert engine.carts["shopper_1"]["items"]["shelf_water"] == 1
 
-# TC006 - Invalid Camera Access Handling
-@patch('cv2.VideoCapture')
-def test_invalid_camera_access(mock_video_capture):
-    mock_video_capture.return_value.isOpened.return_value = False
-    with patch('builtins.print') as mock_print:
-        with pytest.raises(SystemExit):
-            run_camera()  # assuming run_camera handles the exit
-        mock_print.assert_called_with("Failed to access camera.")
+def test_shelf_rois_valid_coordinates():
+    for shelf_id, (x1, y1, x2, y2) in SHELF_ROIS.items():
+        assert x1 < x2, f"Shelf {shelf_id} has invalid width: x1={x1}, x2={x2}"
+        assert y1 < y2, f"Shelf {shelf_id} has invalid height: y1={y1}, y2={y2}"
+        assert x1 >= 0 and y1 >= 0, f"Shelf {shelf_id} coordinates must be positive"
+        assert x2 <= 640 and y2 <= 480, f"Shelf {shelf_id} must fit standard 640x480 frame"
 
-# TC007 - Detect Hand Motion Below the Threshold
-def test_detect_hand_motion_below_threshold():
-    # This test would require actual implementation to check for motion detection
-    pass  # Placeholder since the actual motion detection isn't part of the provided source
 
-# TC008 - Shelf Interaction Timeout
-def test_shelf_interaction_timeout():
-    engine = VirtualCartEngine()
-    engine.register_shopper("shopper_1")
-    
-    # Simulate adding an item
-    engine.add_item("shopper_1", "shelf_chips")
-    initial_count = engine.carts["shopper_1"]["items"].get("shelf_chips", 0)
+def test_shelf_rois_do_not_cross_exit_line():
+    for shelf_id, (_, _, _, y2) in SHELF_ROIS.items():
+        assert y2 < EXIT_LINE_Y, f"Shelf {shelf_id} bottom ({y2}) must be above exit line ({EXIT_LINE_Y})"
 
-    # Normally, here we'd check for a cooldown logic that prevents item addition.
-    # Adjust below based on your cooldown logic
-    engine.add_item("shopper_1", "shelf_chips")  # For testing purpose, adding again
 
-    assert engine.carts["shopper_1"]["items"]["shelf_chips"] == initial_count + 1  # Adjust based on your cooldown logic
-
-# Update failing tests to ensure functionality works as intended
-@patch('cv2.VideoCapture')
-def test_run_camera_invalid_access(mock_video_capture):
-    mock_video_capture.return_value.isOpened.return_value = False
-    with patch('builtins.print') as mock_print:
-        run_camera()  # assuming run_camera handles the exit
-        mock_print.assert_called_with("Failed to access camera.")
-
-@patch('cv2.VideoCapture')
-@patch('cv2.findContours')
-def test_run_camera_small_hand_movement(mock_find_contours, mock_video_capture):
-    mock_video_capture.return_value.isOpened.return_value = True
-    mock_video_capture.return_value.read.return_value = (True, MagicMock(shape=(720, 1280, 3)))
-    mock_find_contours.return_value = ([MagicMock(shape=(5, 1, 2))], None)
-
-    with patch('builtins.print') as mock_print:
-        run_camera()  # make sure to capture any prints
-
-@patch('cv2.VideoCapture')
-@patch('cart_engine.VirtualCartEngine.add_item')
-def test_run_camera_shelf_interaction_timeout(mock_add_item, mock_video_capture):
-    mock_video_capture.return_value.isOpened.return_value = True
-    mock_video_capture.return_value.read.return_value = (True, MagicMock(shape=(720, 1280, 3)))
-
-    # Simulating a successful hand detection
-    with patch('cv2.findContours') as mock_find_contours:
-        mock_find_contours.return_value = ([MagicMock(shape=(5, 1, 2))], None)
-        mock_add_item.return_value = None
-
-        run_camera()  # Removed the for loop to avoid timeout logic inconsistency.
+def test_exit_line_within_frame():
+    assert 0 < EXIT_LINE_Y < 480
